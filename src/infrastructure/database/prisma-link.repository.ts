@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma-client';
 import { ILinkRepository } from '../../domain/interfaces';
 import { Link, LinkParameter, RedirectConfig } from '../../domain/entities';
 
 export class PrismaLinkRepository implements ILinkRepository {
-  private prisma = new PrismaClient();
+  private prisma = prisma;
 
   async create(link: Link): Promise<Link> {
     const created = await this.prisma.link.create({

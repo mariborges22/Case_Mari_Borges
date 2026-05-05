@@ -1,10 +1,10 @@
-import amqp, { Connection, Channel } from 'amqplib';
+import * as amqp from 'amqplib';
 import { v4 as uuid } from 'uuid';
 import { IEventBus } from '../../domain/interfaces';
 
 export class RabbitMQEventBus implements IEventBus {
-  private connection: Connection | null = null;
-  private channel: Channel | null = null;
+  private connection: amqp.Connection | null = null;
+  private channel: amqp.Channel | null = null;
 
   async publish(topic: string, message: any): Promise<void> {
     try {
