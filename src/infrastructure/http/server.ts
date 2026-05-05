@@ -79,8 +79,10 @@ app.use('/api/v1', router);
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-app.listen(port, () => {
-  console.log(`Servidor iniciado com sucesso 🚀🚀🚀`);
-});
+if (require.main === module) {
+  app.listen(port, () => {
+    console.log(`Servidor iniciado com sucesso 🚀🚀🚀`);
+  });
+}
 
 export { app };
