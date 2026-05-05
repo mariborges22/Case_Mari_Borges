@@ -1,0 +1,67 @@
+---
+# infrastructure/ansible/deploy.yml
+- name: Deploy Campaign Link Management API
+  hosts: app_servers
+  become: yes
+  tasks:
+    - name: Instalar dependências do Docker
+      apt:
+        name: "{{ item }}"
+        state: present
+        update_cache: yes
+      loop:
+        - apt-transport-https
+        - ca-certificates
+        - curl
+        - software-properties-common
+
+    - name: Adicionar chave GPG do Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Instalar Docker e Docker Compose
+      apt:
+        name: 
+          - docker-ce
+          - docker-compose-plugin
+        state: present
+
+    - name: Copiar arquivos do projeto
+      copy:
+        src: ../../
+        dest: /opt/link-api
+        mode: '0755'
+
+    - name: Instalar Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Copiar configuração do Nginx
+      copy:
+        src: ../nginx/api.conf
+        dest: /etc/nginx/sites-available/api.conf
+      notify: Reload Nginx
+
+    - name: Ativar site no Nginx
+      file:
+        src: /etc/nginx/sites-available/api.conf
+        dest: /etc/nginx/sites-enabled/api.conf
+        state: link
+
+    - name: Remover configuração padrão do Nginx
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Subir a aplicação (Docker Compose)
+      shell: |
+        cd /opt/link-api
+        docker compose up -d --build
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
