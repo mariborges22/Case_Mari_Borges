@@ -1,3 +1,4 @@
+import { Request, Response } from 'express';
 import { PrismaLinkRepository } from '../../database/prisma-link.repository';
 import { RedisCacheService } from '../../cache/redis-cache.service';
 import { RabbitMQEventBus } from '../../messaging/rabbitmq-event-bus';

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { RedisCacheService } from '../cache/redis-cache.service';
+import { RedisCacheService } from '../../cache/redis-cache.service';
 
 const cacheService = new RedisCacheService();
 
@@ -26,7 +26,7 @@ export const idempotencyMiddleware = async (req: Request, res: Response, next: N
       `idempotency:${key}`, 
       JSON.stringify({ status: res.statusCode, body }), 
       86400
-    ).catch(err => console.error('Erro ao salvar idempotência no Redis:', err));
+    ).catch((err: Error) => console.error('Erro ao salvar idempotência no Redis:', err));
 
     return originalSend.call(res, body);
   };
