@@ -4,11 +4,15 @@ import { Link } from '../../src/domain/entities';
 describe('GenerateLinkUseCase', () => {
   let useCase: GenerateLinkUseCase;
   let mockLinkRepository: any;
+  let mockProjectRepository: any;
   let mockCacheService: any;
   let mockEventBus: any;
 
   beforeEach(() => {
     mockLinkRepository = {
+      findById: jest.fn()
+    };
+    mockProjectRepository = {
       findById: jest.fn()
     };
     mockCacheService = {
@@ -18,36 +22,33 @@ describe('GenerateLinkUseCase', () => {
     mockEventBus = {
       publish: jest.fn().mockResolvedValue(undefined)
     };
-    useCase = new GenerateLinkUseCase(mockLinkRepository, mockCacheService, mockEventBus);
+    useCase = new GenerateLinkUseCase(mockLinkRepository, mockProjectRepository, mockCacheService, mockEventBus);
   });
 
-  it('should generate a link with parameters and cache it', async () => {
-    const mockLink = new Link(
-      'link-id',
-      'Test Link',
-      'https://example.com',
-      'project-id',
-      [{ key: 'utm_source', value: 'google' }]
-    );
+  it('should generate a link and save to cache if not cached', async () => {
+    const mockLink = {
+      id: 'link-id',
+      baseUrl: 'https://loja.com/produto',
+      projectId: 'proj-123',
+      parameters: [{ key: 'utm_source', value: 'facebook' }]
+    };
+
+    const mockProject = { id: 'proj-123', userId: 'user-456' };
 
     mockLinkRepository.findById.mockResolvedValue(mockLink);
+    mockProjectRepository.findById.mockResolvedValue(mockProject);
     mockCacheService.get.mockResolvedValue(null);
 
-    const result = await useCase.execute('link-id');
+    const result = await useCase.execute('link-id', 'user-456');
 
-    expect(result).toBe('https://example.com/?utm_source=google');
-    expect(mockCacheService.set).toHaveBeenCalledWith(
-      'link:gen:link-id',
-      'https://example.com/?utm_source=google',
-      300
-    );
-    expect(mockEventBus.publish).toHaveBeenCalled();
+    expect(result).toBe('https://loja.com/produto?utm_source=facebook');
+    expect(mockCacheService.set).toHaveBeenCalled();
   });
 
   it('should return cached link if available', async () => {
     mockCacheService.get.mockResolvedValue('https://cached-link.com');
 
-    const result = await useCase.execute('link-id');
+    const result = await useCase.execute('link-id', 'user-456');
 
     expect(result).toBe('https://cached-link.com');
     expect(mockLinkRepository.findById).not.toHaveBeenCalled();

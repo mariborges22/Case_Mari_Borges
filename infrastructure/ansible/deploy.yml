@@ -33,7 +33,35 @@
         dest: /opt/link-api
         mode: '0755'
 
+    - name: Instalar Nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Copiar configuração do Nginx
+      copy:
+        src: ../nginx/api.conf
+        dest: /etc/nginx/sites-available/api.conf
+      notify: Reload Nginx
+
+    - name: Ativar site no Nginx
+      file:
+        src: /etc/nginx/sites-available/api.conf
+        dest: /etc/nginx/sites-enabled/api.conf
+        state: link
+
+    - name: Remover configuração padrão do Nginx
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
     - name: Subir a aplicação (Docker Compose)
       shell: |
         cd /opt/link-api
         docker compose up -d --build
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded

@@ -97,41 +97,31 @@ app.use('/api/v1', router);
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-const server = app.listen(port, () => {
-  logger.info(`🚀 Server running on port ${port}`);
-});
-
-// --- GRACEFUL SHUTDOWN LOGIC ---
-const shutdown = async (signal: string) => {
-  logger.warn(`\n🛑 Recebido ${signal}. Iniciando encerramento gracioso...`);
-  
-  // 1. Define um timeout de segurança para forçar o fechamento se demorar demais
-  const forceExitTimeout = setTimeout(() => {
-    logger.error('⚠️ Forçando encerramento (timeout de 10s atingido)');
-    process.exit(1);
-  }, 10000);
-  forceExitTimeout.unref();
-
-  // 2. Para de aceitar novas conexões e espera as atuais terminarem
-  server.close(async () => {
-    logger.info('✅ Conexões HTTP finalizadas.');
-    
-    try {
-      // 3. Fecha conexões de infraestrutura APÓS as requisições terminarem
-      await prisma.$disconnect();
-      logger.info('✅ Banco de dados desconectado.');
-
-      clearTimeout(forceExitTimeout);
-      logger.info('🚀 Sistema encerrado com sucesso. Até logo! 👋');
-      process.exit(0);
-    } catch (err) {
-      logger.error('❌ Erro ao fechar banco de dados:', err);
-      process.exit(1);
-    }
+if (require.main === module) {
+  const server = app.listen(port, () => {
+    logger.info(`🚀 Server running on port ${port}`);
   });
-};
 
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
+  // --- GRACEFUL SHUTDOWN LOGIC ---
+  const shutdown = async (signal: string) => {
+    logger.warn(`\n🛑 Recebido ${signal}. Iniciando encerramento gracioso...`);
+    
+    server.close(async () => {
+      logger.info('✅ Conexões HTTP finalizadas.');
+      
+      try {
+        await prisma.$disconnect();
+        logger.info('✅ Banco de dados desconectado.');
+        process.exit(0);
+      } catch (err) {
+        logger.error('❌ Erro ao fechar banco de dados:', err);
+        process.exit(1);
+      }
+    });
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+}
 
 export { app };

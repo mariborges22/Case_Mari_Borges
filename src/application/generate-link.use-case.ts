@@ -1,4 +1,4 @@
-import { ILinkRepository, ICacheService, IEventBus } from '../domain/interfaces';
+import { ILinkRepository, IProjectRepository, ICacheService, IEventBus } from '../domain/interfaces';
 import { logger } from '../shared/logger';
 
 export class GenerateLinkUseCase {
