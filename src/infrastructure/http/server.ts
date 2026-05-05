@@ -82,3 +82,5 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.listen(port, () => {
   console.log(`Servidor iniciado com sucesso 🚀🚀🚀`);
 });
+
+export { app };
