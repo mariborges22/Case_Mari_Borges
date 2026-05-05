@@ -1,9 +1,11 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
 import { v4 as uuid } from 'uuid';
 import { idempotencyMiddleware } from './middleware/idempotency';
 import { authMiddleware } from './middleware/auth';
@@ -13,8 +15,7 @@ import { LinkController } from './controllers/link.controller';
 import { UserController } from './controllers/user.controller';
 import { ProjectController } from './controllers/project.controller';
 import { LinkManagementController } from './controllers/link-management.controller';
-
-dotenv.config();
+import { prisma } from '../database/prisma-client';
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -34,12 +35,22 @@ app.use(express.json()); // Apenas JSON (Anti-XML)
 app.use(morgan('dev'));
 
 // Rate Limiting (DDoS protection)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // Limite de 100 requisições por IP
-  message: 'Muitas requisições vindas deste IP, tente novamente mais tarde.'
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  message: 'Muitas requisições vindas deste IP.'
 });
-app.use(limiter);
+
+// Limiter Rígido para Autenticação (Anti-Brute Force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 5, // Apenas 5 tentativas
+  message: 'Muitas tentativas de login. Tente novamente em 15 minutos.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use(globalLimiter);
 
 // Idempotency
 app.use(idempotencyMiddleware);
@@ -54,9 +65,16 @@ const linkManagementController = new LinkManagementController();
 const router = express.Router();
 
 // Public Routes
-router.post('/users/register', (req, res) => userController.register(req, res));
-router.post('/users/login', (req, res) => userController.login(req, res));
+router.post('/users/register', authLimiter, (req, res) => userController.register(req, res));
+router.post('/users/login', authLimiter, (req, res) => userController.login(req, res));
 router.get('/metrics', metricsEndpoint);
+
+// Endpoint para teste de Graceful Shutdown (Lento de propósito)
+router.get('/chaos/slow', async (req, res) => {
+  logger.warn('🐢 Iniciando requisição lenta (5s)...');
+  await new Promise(resolve => setTimeout(resolve, 5000));
+  res.json({ message: 'Concluída com sucesso mesmo após sinal de desligamento!' });
+});
 
 // Protected Routes
 router.use(authMiddleware);
@@ -79,10 +97,41 @@ app.use('/api/v1', router);
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-if (require.main === module) {
-  app.listen(port, () => {
-    console.log(`Servidor iniciado com sucesso 🚀🚀🚀`);
+const server = app.listen(port, () => {
+  logger.info(`🚀 Server running on port ${port}`);
+});
+
+// --- GRACEFUL SHUTDOWN LOGIC ---
+const shutdown = async (signal: string) => {
+  logger.warn(`\n🛑 Recebido ${signal}. Iniciando encerramento gracioso...`);
+  
+  // 1. Define um timeout de segurança para forçar o fechamento se demorar demais
+  const forceExitTimeout = setTimeout(() => {
+    logger.error('⚠️ Forçando encerramento (timeout de 10s atingido)');
+    process.exit(1);
+  }, 10000);
+  forceExitTimeout.unref();
+
+  // 2. Para de aceitar novas conexões e espera as atuais terminarem
+  server.close(async () => {
+    logger.info('✅ Conexões HTTP finalizadas.');
+    
+    try {
+      // 3. Fecha conexões de infraestrutura APÓS as requisições terminarem
+      await prisma.$disconnect();
+      logger.info('✅ Banco de dados desconectado.');
+
+      clearTimeout(forceExitTimeout);
+      logger.info('🚀 Sistema encerrado com sucesso. Até logo! 👋');
+      process.exit(0);
+    } catch (err) {
+      logger.error('❌ Erro ao fechar banco de dados:', err);
+      process.exit(1);
+    }
   });
-}
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export { app };

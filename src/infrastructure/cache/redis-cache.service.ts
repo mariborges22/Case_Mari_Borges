@@ -7,10 +7,24 @@ export class RedisCacheService implements ICacheService {
   private redis: Redis;
 
   constructor() {
-    this.redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    logger.info(`Initializing Redis connection to: ${redisUrl.split('@')[1] || 'localhost'}`);
     
-    this.redis.on('connect', () => logger.info('Redis connected'));
-    this.redis.on('error', (err) => logger.error('Redis connection error', { err }));
+    this.redis = new Redis(redisUrl, {
+      tls: redisUrl.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+      family: 4, // Força IPv4 (Resolve o AggregateError no Node 20)
+      connectTimeout: 10000, // 10 segundos para desistir
+      maxRetriesPerRequest: 1
+    });
+    
+    this.redis.on('connect', () => logger.info('Redis connected to cloud ☁️'));
+    this.redis.on('error', (err) => {
+      logger.error('Redis connection error', { 
+        message: err.message,
+        stack: err.stack,
+        url: redisUrl.split('@')[1] // Loga apenas o host por segurança
+      });
+    });
   }
 
   async set(key: string, value: string, ttlSeconds: number = 3600): Promise<void> {

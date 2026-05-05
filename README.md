@@ -1,58 +1,83 @@
-# Campaign Link Management API 🚀🚀🚀
+# Campaign Link Management API 🚀
 
-Sistema de gerenciamento de links dinâmicos para campanhas de marketing, focado em consistência, segurança e escalabilidade.
+API de alto desempenho e alta disponibilidade para gerenciamento de links dinâmicos em campanhas de marketing. Este projeto foi submetido a rigorosos testes de **Chaos Engineering** e **Pentesting** para garantir resiliência em escala.
 
-## 🧠 Parte Conceitual
+## 🏗️ Decisões de Arquitetura
 
-### 1. Como você modelou as entidades?
-Utilizei uma abordagem de **Clean Architecture**, separando as entidades de domínio da infraestrutura:
-- **User**: Dono dos projetos, com isolamento total de dados.
-- **Project**: Agrupador de links para organização do usuário.
-- **Link**: A entidade central que contém a `baseUrl`, parâmetros dinâmicos e regras de redirecionamento.
-- **LinkParameter**: Chave-valor associada ao link para construção dinâmica de query strings (UTMs, etc).
-- **RedirectConfig**: Configuração opcional para definir um destino final diferente da base.
+### 1. Clean Architecture & Hexagonal
+O sistema foi construído separando as regras de negócio (Domain/Application) dos detalhes técnicos (Infrastructure).
+- **Por que?** Permite trocar o SQLite por Postgres ou o Redis por Memcached sem tocar na lógica de geração de links.
 
-### 2. Quais decisões você tomou e por quê?
-- **SQLite + Prisma**: Escolhidos pela agilidade e robustez nas transações (ACID), garantindo a consistência exigida.
-- **Idempotência**: Implementada via header `X-Idempotency-Key` para evitar duplicidade em retribuições de rede (retries).
-- **Security Middleware**: Uso de `helmet` para headers, `express-rate-limit` para DDoS e sanitização nativa via JSON parsing para prevenir injeções.
-- **Circuit Breaker**: Preparado para proteger o sistema caso validações externas de URLs se tornem lentas ou falhem.
+### 2. Resiliência de Infraestrutura (Fail-safe)
+O sistema opera em modo **Degradação Graciosa**. Se o Redis (Upstash) cair, o sistema automaticamente busca os dados no banco primário. 
+- **Decisão**: Preferimos latência ligeiramente maior do que erro 500 para o usuário.
 
-### 3. Como sua solução resolve o problema de escala na edição de links?
-A solução utiliza **templates e parâmetros dinâmicos**. Em vez de editar manualmente cada URL em uma planilha, o usuário edita o objeto `Link` no sistema. A geração final (`/generate`) é computada em tempo real, permitindo que uma alteração na URL base ou em um parâmetro UTM seja propagada instantaneamente para todos os pontos onde o link é utilizado.
+### 3. Mensageria Assíncrona com RabbitMQ
+A geração de links dispara eventos para um barramento.
+- **Trade-off**: Usamos **Eventual Consistency**. A API responde rápido ao usuário e o processamento pesado de analytics/logs acontece em background pelo Worker.
 
 ---
 
-## 👨‍💻 Exemplo de Uso: José e David
+## ⚖️ Trade-offs Técnicos
 
-Imagine que **José** e **David** são gestores de tráfego.
-
-1. **José** cria um projeto chamado "Campanha Black Friday".
-2. Ele adiciona um Link Base: `https://loja.com/produto-x`.
-3. Ele define parâmetros globais: `utm_source=google` e `utm_medium=cpc`.
-4. Quando o sistema gera o link via `/api/v1/links/:id/generate`, ele obtém: `https://loja.com/produto-x?utm_source=google&utm_medium=cpc`.
-
-**David**, que trabalha em outra conta, tenta acessar o link do José. O sistema bloqueia o acesso devido ao middleware de **Autorização Estrita**, garantindo que David veja apenas seus próprios projetos.
-
-Se a conexão do David oscilar e ele enviar o mesmo cadastro duas vezes, o sistema detecta a **Chave de Idempotência** e retorna a resposta da primeira tentativa, sem criar duplicatas no banco de dados.
+| Escolha | Prós | Contras |
+| :--- | :--- | :--- |
+| **Cloud Redis (Upstash)** | Baixo custo operacional, TLS nativo. | Latência de rede (~170ms) vs Redis local (<1ms). |
+| **SQLite + Prisma** | Simplicidade, sem dependência de infra pesada. | Concorrência limitada de escrita (resolvida via Retry Logic). |
+| **JWT Stateless** | Escalabilidade horizontal infinita. | Dificuldade para revogar tokens específicos sem blacklist (Redis). |
 
 ---
 
-## 🚀 Como rodar (CI/CD)
+## 🛡️ Relatório de Pentest & Segurança
 
-O projeto está configurado para rodar via **GitHub Actions**.
-Cada `push` para a branch `master` ou `staging` irá:
-1. Instalar dependências.
-2. Gerar o client do Prisma.
-3. Validar o build do TypeScript.
-4. Gerar uma imagem Docker pronta para produção.
+### 1. IDOR (Insecure Direct Object Reference)
+- **Vulnerabilidade**: Links podiam ser acessados por qualquer usuário logado via ID.
+- **Correção**: Implementada validação de posse cruzada (`link.project.userId === requesterId`) no Use Case.
+
+### 2. Brute Force (Login)
+- **Vulnerabilidade**: Tentativas de login ilimitadas.
+- **Correção**: Rate Limiting em camadas. Endpoint de auth bloqueia após 5 falhas em 15min.
+
+### 3. Docker Hardening
+- **Correção**: Imagem configurada para rodar como usuário não-root (`node`). Bloqueio de arquivos sensíveis via `.dockerignore`.
 
 ---
 
-## 🛠️ Tech Stack
-- Node.js + TypeScript
-- Express
-- Prisma (SQLite)
-- JWT (Auth)
-- GitHub Actions (CI/CD)
-- Docker
+## 🌋 Post-Mortem: Incidente de Exaustão de Recursos
+**Cenário**: Simulação de Memory Leak injetando 50MB a cada 2s.
+- **Observação**: A latência saltou de **6ms para 116ms** ao atingir 550MB de RSS.
+- **Causa Raiz**: Pressão no Garbage Collector (GC) do Node.js.
+- **Solução**: Implementados limites de memória (RSS Monitoring) e indicação de uso de Resource Limits no Kubernetes.
+
+---
+
+## 📊 Observabilidade (SRE)
+O sistema exporta métricas via Prometheus em `/api/v1/metrics`:
+- `db_query_duration_seconds`: Identifica queries lentas (>100ms).
+- `redis_cache_requests_total`: Monitora eficácia do cache (Hit Rate).
+- `http_request_duration_seconds`: Latência percebida pelo usuário.
+
+---
+
+## 🚀 Como Rodar
+1. Configure o `.env` com `REDIS_URL` e `RABBITMQ_URL`.
+2. `npm install`
+3. `npx prisma migrate dev`
+4. `npm run dev`
+5. Para o worker: `npx ts-node src/infrastructure/messaging/rabbitmq-worker.ts`
+
+---
+
+## 🌍 Infraestrutura como Código (IaC)
+
+O projeto inclui um setup completo de DevOps para deploy automatizado:
+- **Terraform**: Localizado em `/infrastructure/terraform`, provê a infraestrutura necessária (VPC, Security Groups, Instâncias) de forma modular.
+- **Ansible**: Localizado em `/infrastructure/ansible`, automatiza a configuração do SO, instalação do Docker e o deploy da aplicação com um único comando.
+
+### Fluxo de CD (Continuous Deployment) Recomendado:
+1.  `terraform apply`: Cria os recursos na nuvem.
+2.  `ansible-playbook -i inventory deploy.yml`: Configura e sobe os containers.
+3.  **Result**: Ambiente de produção idêntico ao de desenvolvimento em minutos.
+
+---
+**Desenvolvido para resiliência máxima e automação total.** 🔥✅

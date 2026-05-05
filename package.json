@@ -4,7 +4,7 @@
   "description": "Dynamic Link Management System for Campaigns",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/infrastructure/http/server.ts",
+    "dev": "ts-node-dev -r dotenv/config --respawn --transpile-only src/infrastructure/http/server.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
