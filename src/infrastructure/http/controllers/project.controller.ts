@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { PrismaProjectRepository } from '../../database/prisma-project.repository';
 import { Project } from '../../../domain/entities';
 import { v4 as uuid } from 'uuid'; // Usaremos crypto.randomUUID se preferir, mas para o exemplo:

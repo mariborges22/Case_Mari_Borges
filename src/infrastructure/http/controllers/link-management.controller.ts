@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { PrismaLinkRepository } from '../../database/prisma-link.repository';
 import { PrismaProjectRepository } from '../../database/prisma-project.repository';
 import { Link } from '../../../domain/entities';
