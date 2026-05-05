@@ -61,9 +61,3 @@ model RedirectConfig {
   createdAt      DateTime @default(now())
 }
 
-model IdempotencyKey {
-  key       String   @id
-  response  String   // JSON string of the saved response
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-}

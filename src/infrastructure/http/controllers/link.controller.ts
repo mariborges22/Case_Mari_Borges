@@ -1,9 +1,12 @@
-import { Request, Response } from 'express';
 import { PrismaLinkRepository } from '../../database/prisma-link.repository';
+import { RedisCacheService } from '../../cache/redis-cache.service';
+import { RabbitMQEventBus } from '../../messaging/rabbitmq-event-bus';
 import { GenerateLinkUseCase } from '../../../application/generate-link.use-case';
 
 const linkRepository = new PrismaLinkRepository();
-const generateLinkUseCase = new GenerateLinkUseCase(linkRepository);
+const cacheService = new RedisCacheService();
+const eventBus = new RabbitMQEventBus();
+const generateLinkUseCase = new GenerateLinkUseCase(linkRepository, cacheService, eventBus);
 
 export class LinkController {
   async generate(req: Request, res: Response) {

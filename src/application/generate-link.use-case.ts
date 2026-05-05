@@ -1,34 +1,55 @@
-import { ILinkRepository } from '../domain/interfaces';
+import { ILinkRepository, ICacheService, IEventBus } from '../domain/interfaces';
+import { logger } from '../shared/logger';
 
 export class GenerateLinkUseCase {
-  constructor(private linkRepository: ILinkRepository) {}
+  constructor(
+    private linkRepository: ILinkRepository,
+    private cacheService: ICacheService,
+    private eventBus: IEventBus
+  ) {}
 
   async execute(linkId: string): Promise<string> {
+    // 1. Tenta buscar no Cache (Redis)
+    const cachedUrl = await this.cacheService.get(`link:gen:${linkId}`);
+    if (cachedUrl) {
+      logger.info('Link serving from cache', { linkId });
+      return cachedUrl;
+    }
+
+    // 2. Busca no Banco
     const link = await this.linkRepository.findById(linkId);
 
     if (!link) {
+      logger.error('Link not found', { linkId });
       throw new Error('Link not found');
     }
 
-    // Geração dinâmica do link
+    // 3. Geração dinâmica
     const url = new URL(link.baseUrl);
-
-    // Adiciona parâmetros dinâmicos (UTMs, etc)
     link.parameters.forEach(param => {
       url.searchParams.append(param.key, param.value);
     });
 
-    // Se houver configuração de redirect, podemos adicionar um parâmetro de destino
-    // ou simplesmente retornar a URL baseada na regra de negócio.
-    // Exemplo: se houver redirect, a URL final pode ser o destino com os UTMs.
+    let finalUrl = url.toString();
+
     if (link.redirect) {
       const redirectUrl = new URL(link.redirect.destinationUrl);
       url.searchParams.forEach((value, key) => {
         redirectUrl.searchParams.append(key, value);
       });
-      return redirectUrl.toString();
+      finalUrl = redirectUrl.toString();
     }
 
-    return url.toString();
+    // 4. Salva no Cache (expira em 5 min para garantir consistência eventual)
+    await this.cacheService.set(`link:gen:${linkId}`, finalUrl, 300);
+
+    // 5. Dispara evento assíncrono (RabbitMQ)
+    this.eventBus.publish('link.generated', {
+      linkId,
+      finalUrl,
+      timestamp: new Date()
+    }).catch(err => logger.error('Failed to publish event', { err }));
+
+    return finalUrl;
   }
 }

@@ -25,3 +25,13 @@ export interface IIdempotencyRepository {
   save(key: string, response: any, expiresAt: Date): Promise<void>;
   find(key: string): Promise<any | null>;
 }
+
+export interface IEventBus {
+  publish(topic: string, message: any): Promise<void>;
+}
+
+export interface ICacheService {
+  set(key: string, value: string, ttlSeconds?: number): Promise<void>;
+  get(key: string): Promise<string | null>;
+  delete(key: string): Promise<void>;
+}
