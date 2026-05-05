@@ -3,8 +3,8 @@ import { v4 as uuid } from 'uuid';
 import { IEventBus } from '../../domain/interfaces';
 
 export class RabbitMQEventBus implements IEventBus {
-  private connection: amqp.Connection | null = null;
-  private channel: amqp.Channel | null = null;
+  private connection: any = null;
+  private channel: any = null;
 
   async publish(topic: string, message: any): Promise<void> {
     try {
@@ -33,7 +33,13 @@ export class RabbitMQEventBus implements IEventBus {
       );
     } catch (error) {
       console.error('RabbitMQ Publish Error:', error);
+      // Não re-throw se for apenas log, mas aqui queremos consistência
       throw error;
     }
+  }
+
+  async close(): Promise<void> {
+    if (this.channel) await this.channel.close();
+    if (this.connection) await this.connection.close();
   }
 }

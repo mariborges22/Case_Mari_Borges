@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../shared/logger';
-import { dbQueryDurationSeconds } from './http/middleware/metrics';
+import { logger } from '../../shared/logger';
+import { dbQueryDurationSeconds } from '../http/middleware/metrics';
 
 const prisma = new PrismaClient({
   log: [
